@@ -16,6 +16,7 @@ from sports.tennis.shot_classification.shot_classification import ShotClassifier
 from sports.tennis.contact_detection.contact_detection import ContactDetector
 from sports.tennis.ball_tracking.tracker import Tracker
 from sports.tennis.net_clearance.clearance import NetClearance
+from sports.tennis.bounce_detection.bounce_detector import BounceDetector
 
 # tennis shot analysis
 from sports.tennis.shot_analysis.groundstroke_analysis import GroundStrokeAnalysis
@@ -84,6 +85,7 @@ def process_tennis_video():
     contact_detector = ContactDetector()
     tracker = Tracker()
     clearance = NetClearance()
+    bounce = BounceDetector()
 
     # shot occurences
     occurences = {
@@ -94,6 +96,7 @@ def process_tennis_video():
 
     tracknet_buffer = [] # a rolling list of 3 frames that are fed into the tracknet model to track the ball
     coordinates = None # an initialized variable that will store the ball coordinates as used in net clearance calculations
+    bounce_detection_frames = [] # a list that will contain all of the frame indexes where a ball was detected
 
     if "video" not in request.files:
         return jsonify({"error": "no video file provided (expected form field 'video')"}), 400
@@ -216,7 +219,8 @@ def process_tennis_video():
             n_contacts += 1 if contact else 0
 
             # ball tracking
-            if len(tracknet_buffer) == 3:
+            if len(tracknet_buffer) >= 3:
+                tracknet_buffer = tracknet_buffer[-3:]
                 tracker.track(frame_sequence=tracknet_buffer) # run ball tracking
                 coordinates = tracker.tracking_history[-1] # get most recent coordinates
                 if coordinates == (-1, -1):
@@ -224,11 +228,14 @@ def process_tennis_video():
                 else:
                     cx, cy = coordinates
                     cx, cy = int(cx), int(cy)
+                    bounce.y_vec.append(cy)
+                    bounce_detection_frames.append(frame_idx)
                     cv.circle(frame, center=(cx, cy), radius=4, color=(255, 0, 0), thickness=2)
                 tracknet_buffer.pop(0) # remove oldest element
             else:
                 pass # less than 3 frames
 
+            # net clearance
             if clearance.net is None:
                 clearance.locate_net(orig_frame)
             else: pass
@@ -248,30 +255,64 @@ def process_tennis_video():
             pbar.update(1)
             pbar.set_description(f"Frame {frame_idx}/{total_frames}")
 
+    print("main processining successful. moving onto bounce detection")
+
+    # bounce detection comes after main processing
+    bounce_frames = bounce.detect_bounces(bounce_detection_frames=bounce_detection_frames)
+
+    # release old writer and reader
     cap.release()
     writer.release()
 
-    avg_clearance = clearance.get_final_clearance()
+    # create new ones
+    cap = cv.VideoCapture(output_path)
+    new_output_path = output_path.replace(".mp4", "_bounce.mp4")
+    fourcc = cv.VideoWriter_fourcc(*"mp4v")
+    writer = cv.VideoWriter(new_output_path, fourcc, fps, frame_size)
+
+    # read video again and now we annotate bounces
+    # it should be pretty fast because we are only reading, drawing, and writing (no ml here)
+    bounce_frame_idx = 0
+    n_bounces = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret: break
+        if bounce_frame_idx in bounce_frames:
+
+            n_bounces += 1 # bounce detected
+
+        bounce_frame_idx += 1
+        writer.write(frame)
+
+    # release
+    cap.release()
+    writer.release()
+
+    # calculate stats
+
+    avg_clearance = clearance.get_final_clearance() # calculate average net clearance
 
     # calculate shot percentages
     fh_percent = (occurences["forehand"] / n_sc_inferences) * 100
     bh_percent = (occurences["backhand"] / n_sc_inferences) * 100
-    h264_path = output_path.replace(".mp4", "_h264.mp4")
+    h264_path = new_output_path.replace(".mp4", "_h264.mp4")
     subprocess.run(
-        ["ffmpeg", "-y", "-i", output_path, "-c:v", "libx264",
+        ["ffmpeg", "-y", "-i", new_output_path, "-c:v", "libx264",
          "-pix_fmt", "yuv420p", "-movflags", "+faststart", h264_path],
         check=True, capture_output=True,
     )
 
     # save output video
     key = upload_video(local_path=h264_path, folder="process_tennis_video")
-    os.remove(h264_path)
 
     # clean temp files
     os.remove(input_path)
     os.remove(audio_path)
     os.remove(output_path)
+    os.remove(new_output_path)
+    os.remove(h264_path)
 
+    # frontend payload
     payload = {
         "net_clearance": avg_clearance,
         "n_contacts": n_contacts,
