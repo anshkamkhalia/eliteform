@@ -1,4 +1,4 @@
-import { processTennisVideo } from "../api";
+import { processTennisVideo, saveAnalysis } from "../api";
 import { useAnalysisJob } from "../hooks/useAnalysisJob";
 import Panel from "../components/Panel";
 import FileDrop from "../components/FileDrop";
@@ -8,7 +8,7 @@ import { IconAlert, IconChart } from "../components/icons";
 
 export default function SessionAnalysisFlow() {
   const job = useAnalysisJob();
-  const { file, setFile, phase, result, error } = job;
+  const { file, setFile, phase, result, error, saveError } = job;
 
   return (
     <div className="workspace">
@@ -27,13 +27,28 @@ export default function SessionAnalysisFlow() {
             <div>{error}</div>
           </div>
         )}
+        {saveError && (
+          <div className="alert alert-error" role="alert">
+            <IconAlert size={16} />
+            <div>Saved analysis to history failed: {saveError}</div>
+          </div>
+        )}
 
         <div className="rail-actions">
           <button
             type="button"
             className="btn btn-primary btn-block"
             disabled={!file || phase === "running"}
-            onClick={() => job.run(processTennisVideo)}
+            onClick={() =>
+              job.run(processTennisVideo, (data) =>
+                saveAnalysis({
+                  kind: "session",
+                  originalFilename: file?.name,
+                  videoKey: data.key,
+                  payload: data,
+                })
+              )
+            }
           >
             Analyze session
           </button>

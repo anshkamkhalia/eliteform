@@ -45,13 +45,13 @@ function UserMenu() {
         <span className="usermenu-avatar">
           <IconUser size={15} />
         </span>
-        <span className="usermenu-name">{user?.username}</span>
+        <span className="usermenu-name">{user?.email}</span>
       </button>
       {open && (
         <div className="usermenu-pop" role="menu">
           <div className="usermenu-head">
             Signed in as
-            <strong>{user?.username}</strong>
+            <strong>{user?.email}</strong>
           </div>
           <button
             type="button"

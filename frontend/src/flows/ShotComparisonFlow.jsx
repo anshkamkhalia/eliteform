@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchProClips, processShotAnalysis } from "../api";
+import { fetchProClips, processShotAnalysis, saveAnalysis } from "../api";
 import { SHOT_TYPES } from "../config";
 import { useAnalysisJob } from "../hooks/useAnalysisJob";
 import Panel from "../components/Panel";
@@ -10,7 +10,7 @@ import { IconAlert, IconChart } from "../components/icons";
 
 export default function ShotComparisonFlow() {
   const job = useAnalysisJob();
-  const { file, setFile, phase, result, error } = job;
+  const { file, setFile, phase, result, error, saveError } = job;
 
   const [shotType, setShotType] = useState("forehand");
   const [pro, setPro] = useState("");
@@ -96,6 +96,12 @@ export default function ShotComparisonFlow() {
             <div>{error}</div>
           </div>
         )}
+        {saveError && (
+          <div className="alert alert-error" role="alert">
+            <IconAlert size={16} />
+            <div>Saved analysis to history failed: {saveError}</div>
+          </div>
+        )}
 
         <div className="rail-actions">
           <button
@@ -103,8 +109,17 @@ export default function ShotComparisonFlow() {
             className="btn btn-primary btn-block"
             disabled={!file || !pro || phase === "running"}
             onClick={() =>
-              job.run((f, signal) =>
-                processShotAnalysis(f, shotType, pro, signal)
+              job.run(
+                (f, signal) => processShotAnalysis(f, shotType, pro, signal),
+                (data) =>
+                  saveAnalysis({
+                    kind: "comparison",
+                    originalFilename: file?.name,
+                    videoKey: data.key,
+                    shotType,
+                    comparisonPro: pro,
+                    payload: data,
+                  })
               )
             }
           >

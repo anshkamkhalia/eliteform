@@ -28,7 +28,7 @@ from api.coaching import generate_coaching_tips
 app = Flask(__name__)
 
 app.config.update(
-    MAX_CONTENT_LENGTH=500 * 1024 * 1024,  # cap uploads at 500 MB
+    MAX_CONTENT_LENGTH=100 * 1024 * 1024,  # cap uploads at 100 MB
 )
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs")

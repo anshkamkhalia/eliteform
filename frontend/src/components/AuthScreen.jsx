@@ -5,7 +5,7 @@ import { IconBall, IconAlert } from "./icons";
 export default function AuthScreen() {
   const { login, register } = useAuth();
   const [mode, setMode] = useState("login"); // "login" | "register"
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -18,9 +18,9 @@ export default function AuthScreen() {
     setBusy(true);
     try {
       if (isRegister) {
-        await register(username.trim(), password);
+        await register(email.trim(), password);
       } else {
-        await login(username.trim(), password);
+        await login(email.trim(), password);
       }
     } catch (err) {
       setError(err.message || "Something went wrong.");
@@ -70,14 +70,14 @@ export default function AuthScreen() {
 
         <form className="auth-form" onSubmit={submit}>
           <div className="field">
-            <label htmlFor="auth-username">Username</label>
+            <label htmlFor="auth-email">Email</label>
             <input
-              id="auth-username"
-              type="text"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="3–32 letters, numbers, or underscores"
+              id="auth-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
               required
               autoFocus
             />
@@ -90,7 +90,7 @@ export default function AuthScreen() {
               autoComplete={isRegister ? "new-password" : "current-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={isRegister ? "At least 8 characters" : "Your password"}
+              placeholder={isRegister ? "At least 6 characters" : "Your password"}
               required
             />
           </div>
@@ -105,7 +105,7 @@ export default function AuthScreen() {
           <button
             type="submit"
             className="btn btn-primary btn-block"
-            disabled={busy || !username || !password}
+            disabled={busy || !email || !password}
           >
             {busy
               ? "Please wait…"

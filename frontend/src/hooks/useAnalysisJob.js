@@ -8,11 +8,16 @@ export function useAnalysisJob() {
   const [phase, setPhase] = useState("idle"); // idle | running | done
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [saveError, setSaveError] = useState(null);
   const abortRef = useRef(null);
 
-  const run = async (call) => {
+  // `onSuccess(data)`, if given, runs after a successful analysis (e.g. to
+  // save it to history). Its failure doesn't affect `phase`/`result` -- the
+  // analysis itself still succeeded -- it just surfaces via `saveError`.
+  const run = async (call, onSuccess) => {
     if (!file) return;
     setError(null);
+    setSaveError(null);
     setResult(null);
     setPhase("running");
     const controller = new AbortController();
@@ -21,6 +26,13 @@ export function useAnalysisJob() {
       const data = await call(file, controller.signal);
       setResult(data);
       setPhase("done");
+      if (onSuccess) {
+        try {
+          await onSuccess(data);
+        } catch (err) {
+          setSaveError(err.message || "Could not save this analysis to history.");
+        }
+      }
     } catch (err) {
       if (err.name === "AbortError") setPhase("idle");
       else {
@@ -36,8 +48,9 @@ export function useAnalysisJob() {
     setFile(null);
     setResult(null);
     setError(null);
+    setSaveError(null);
     setPhase("idle");
   };
 
-  return { file, setFile, phase, result, error, run, cancel, reset };
+  return { file, setFile, phase, result, error, saveError, run, cancel, reset };
 }
