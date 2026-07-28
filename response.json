@@ -1,3 +1,114 @@
 {
-  "error": "authentication required"
+  "key": "process_tennis_shot_analysis/eb79e5a5-aab4-4539-9a7d-302ea41312b5.mp4",
+  "results": {
+    "joint_angles": {
+      "left_elbow": {
+        "difference": 6.312416076660156,
+        "player_average": 121.2403564453125,
+        "player_range": [
+          54.69474411010742,
+          178.7710723876953
+        ],
+        "pro_average": 114.92794036865234,
+        "pro_range": [
+          32.72749328613281,
+          179.16700744628906
+        ]
+      },
+      "left_knee": {
+        "difference": 2.6878509521484375,
+        "player_average": 90.9554672241211,
+        "player_range": [
+          11.614775657653809,
+          179.327392578125
+        ],
+        "pro_average": 88.26761627197266,
+        "pro_range": [
+          19.618736267089844,
+          173.25730895996094
+        ]
+      },
+      "left_shoulder": {
+        "difference": -6.018714904785156,
+        "player_average": 74.30673217773438,
+        "player_range": [
+          22.78660011291504,
+          152.2526092529297
+        ],
+        "pro_average": 80.32544708251953,
+        "pro_range": [
+          11.739032745361328,
+          171.28175354003906
+        ]
+      },
+      "right_elbow": {
+        "difference": 3.6720199584960938,
+        "player_average": 124.87643432617188,
+        "player_range": [
+          67.29104614257812,
+          179.1913299560547
+        ],
+        "pro_average": 121.20441436767578,
+        "pro_range": [
+          20.60980987548828,
+          175.72903442382812
+        ]
+      },
+      "right_knee": {
+        "difference": -3.251800537109375,
+        "player_average": 103.0711441040039,
+        "player_range": [
+          13.188576698303223,
+          169.83860778808594
+        ],
+        "pro_average": 106.32294464111328,
+        "pro_range": [
+          18.543655395507812,
+          175.32679748535156
+        ]
+      },
+      "right_shoulder": {
+        "difference": 1.1114578247070312,
+        "player_average": 80.6598129272461,
+        "player_range": [
+          5.463141918182373,
+          143.1045684814453
+        ],
+        "pro_average": 79.54835510253906,
+        "pro_range": [
+          9.198233604431152,
+          173.6647491455078
+        ]
+      }
+    },
+    "shot_type": "serve",
+    "toss": {
+      "drift_difference_ft": 0.9150080680847168,
+      "player": {
+        "toss_drift_ft": 1.9753046035766602
+      },
+      "pro": {
+        "toss_drift_ft": 1.0602965354919434
+      }
+    },
+    "velocity": {
+      "average_difference": -12.259618759155273,
+      "peak_difference": -28.410409927368164,
+      "player": {
+        "average": 8.149782180786133,
+        "peak": 28.13155174255371
+      },
+      "pro": {
+        "average": 20.409400939941406,
+        "peak": 56.541961669921875
+      }
+    },
+    "visuals": {
+      "player_frame_w": 1920,
+      "player_swing_path": "frontend/heatmaps/0cc37875-89df-4b20-8380-e69d90db8b14_player.png",
+      "pro_frame_w": 360,
+      "pro_swing_path": "frontend/heatmaps/0cc37875-89df-4b20-8380-e69d90db8b14_pro.png"
+    }
+  },
+  "video_url": "https://3c31d7353a80c457d52a84e3066ea36c.r2.cloudflarestorage.com/atlas-motion/process_tennis_shot_analysis/eb79e5a5-aab4-4539-9a7d-302ea41312b5.mp4?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=1de6a5d68ebeae3365dff7090d661790%2F20260728%2Fauto%2Fs3%2Faws4_request&X-Amz-Date=20260728T032401Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host&X-Amz-Signature=a276bcc080f4169596d3c54f734c56555cd68c2bb81d07db59bb9c102c18d8e7"
 }

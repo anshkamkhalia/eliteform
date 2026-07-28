@@ -1,12 +1,9 @@
 # backend
 
 import os
-import secrets
-from datetime import timedelta
-
 import cv2 as cv
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify
 from werkzeug.utils import secure_filename
 import librosa
 import subprocess
@@ -26,25 +23,13 @@ from sports.tennis.shot_analysis.serve_analysis import ServeAnalysis
 
 from api.r2 import upload_video, presigned_video_url
 from api.coaching import generate_coaching_tips
-from api.db import init_app as init_db
-from api.auth import auth_bp, login_required
-from api.history import history_bp, save_analysis
 
 # setup
 app = Flask(__name__)
 
-app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
 app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax", 
-    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true",
-    PERMANENT_SESSION_LIFETIME=timedelta(days=7),
     MAX_CONTENT_LENGTH=500 * 1024 * 1024,  # cap uploads at 500 MB
 )
-
-init_db(app)
-app.register_blueprint(auth_bp)
-app.register_blueprint(history_bp)
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -87,12 +72,12 @@ def draw_rounded_rect(img, pt1, pt2, color, radius=8, thickness=-1):
         cv.line(img, (x2, y1 + radius), (x2, y2 - radius), color, thickness, cv.LINE_AA)
 
 @app.route("/process-tennis-video", methods=["POST"])
-@login_required
 def process_tennis_video():
 
     """
-    accepts a video, runs shot classification only, writes the
-    prediction onto each frame, and saves the output to /runs
+    
+    tennis video analysis pipeline
+    
     """
 
     classifier = ShotClassifier()
@@ -293,38 +278,30 @@ def process_tennis_video():
         "fh_percent": fh_percent,
         "bh_percent": bh_percent,
         "key": key,
-        # R2's S3 endpoint rejects unsigned requests, so hand the browser a
-        # presigned URL it can actually play.
         "video_url": presigned_video_url(key),
     }
 
-    save_analysis(
-        session["user_id"],
-        "session",
-        payload,
-        original_filename=filename,
-        video_key=key,
-        summary={
-            "net_clearance": avg_clearance,
-            "n_contacts": n_contacts,
-            "fh_percent": fh_percent,
-            "bh_percent": bh_percent,
-        },
-    )
-
     return jsonify(payload)
 
-
-
 @app.route("/pro-clips", methods=["GET"])
-@login_required
 def pro_clips():
+
+    """
+    
+    lists all files in pro_videos
+    
+    """
+
     return jsonify(list_pro_clips())
 
-
 @app.route("/process-tennis-shot-analysis", methods=["POST"])
-@login_required
 def process_tennis_shot_analysis():
+
+    """
+    
+    ai coaching tips
+    
+    """
 
     shot_type = request.form.get("shot_type")
     comparison_pro = request.form.get("comparison_pro")
@@ -363,27 +340,16 @@ def process_tennis_shot_analysis():
         "video_url": presigned_video_url(key),
     }
 
-    velocity = (results or {}).get("velocity", {})
-    save_analysis(
-        session["user_id"],
-        "comparison",
-        payload,
-        original_filename=filename,
-        video_key=key,
-        shot_type=shot_type,
-        comparison_pro=comparison_pro,
-        summary={
-            "avg_velocity_diff": velocity.get("average_difference"),
-            "peak_velocity_diff": velocity.get("peak_difference"),
-        },
-    )
-
     return jsonify(payload), 200
 
-
 @app.route("/coaching-tips", methods=["POST"])
-@login_required
 def coaching_tips():
+
+    """
+    
+    gets ai coaching tips from gemini by sending extracting information
+    
+    """
 
     payload = request.get_json(silent=True)
     if not payload or "results" not in payload:
@@ -399,7 +365,6 @@ def coaching_tips():
     except Exception as e:
         print(e)
         return jsonify({"error": f"coaching generation failed: {e}"}), 502
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=True)
