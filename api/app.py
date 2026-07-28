@@ -54,7 +54,6 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 PRO_VIDEOS_ROOT = "pro_videos/tennis"
 
-
 def list_pro_clips():
     clips = {}
     for shot_type in ("forehand", "backhand", "serve"):
@@ -66,6 +65,26 @@ def list_pro_clips():
                     names.append(os.path.splitext(fname)[0])
         clips[shot_type] = sorted(names)
     return clips
+
+def draw_rounded_rect(img, pt1, pt2, color, radius=8, thickness=-1):
+    x1, y1 = pt1
+    x2, y2 = pt2
+
+    if thickness < 0:
+        cv.rectangle(img, (x1 + radius, y1), (x2 - radius, y2), color, -1, cv.LINE_AA)
+        cv.rectangle(img, (x1, y1 + radius), (x2, y2 - radius), color, -1, cv.LINE_AA)
+        for cx, cy in [(x1 + radius, y1 + radius), (x2 - radius, y1 + radius),
+                       (x1 + radius, y2 - radius), (x2 - radius, y2 - radius)]:
+            cv.circle(img, (cx, cy), radius, color, -1, cv.LINE_AA)
+    else:
+        cv.ellipse(img, (x1 + radius, y1 + radius), (radius, radius), 180, 0, 90, color, thickness, cv.LINE_AA)
+        cv.ellipse(img, (x2 - radius, y1 + radius), (radius, radius), 270, 0, 90, color, thickness, cv.LINE_AA)
+        cv.ellipse(img, (x1 + radius, y2 - radius), (radius, radius), 90, 0, 90, color, thickness, cv.LINE_AA)
+        cv.ellipse(img, (x2 - radius, y2 - radius), (radius, radius), 0, 0, 90, color, thickness, cv.LINE_AA)
+        cv.line(img, (x1 + radius, y1), (x2 - radius, y1), color, thickness, cv.LINE_AA)
+        cv.line(img, (x1 + radius, y2), (x2 - radius, y2), color, thickness, cv.LINE_AA)
+        cv.line(img, (x1, y1 + radius), (x1, y2 - radius), color, thickness, cv.LINE_AA)
+        cv.line(img, (x2, y1 + radius), (x2, y2 - radius), color, thickness, cv.LINE_AA)
 
 @app.route("/process-tennis-video", methods=["POST"])
 @login_required
@@ -87,6 +106,9 @@ def process_tennis_video():
         "backhand": 0,
     }
     n_sc_inferences = 0 # amount of times that the shot classifier ran, used in percent calculations
+
+    tracknet_buffer = [] # a rolling list of 3 frames that are fed into the tracknet model to track the ball
+    coordinates = None # an initialized variable that will store the ball coordinates as used in net clearance calculations
 
     if "video" not in request.files:
         return jsonify({"error": "no video file provided (expected form field 'video')"}), 400
@@ -138,6 +160,7 @@ def process_tennis_video():
                 break
 
             frame = cv.resize(frame, frame_size)
+            tracknet_buffer.append(frame)
             orig_frame = frame.copy()
             
             output_class, probs = classifier.classify_shots(
@@ -157,14 +180,49 @@ def process_tennis_video():
                 display_text = "neutral"
 
             if "neutral" not in display_text:
+                font = cv.FONT_HERSHEY_SIMPLEX
+                font_scale = 0.45
+                thickness = 1
+                padding_x = 10
+                padding_y = 8
+                radius = 8
+                accent_color = (255, 200, 0)
+                text_color = (235, 235, 235)
+
+                (text_w, text_h), baseline = cv.getTextSize(display_text, font, font_scale, thickness)
+
+                frame_h, frame_w = frame.shape[:2]
+
+                box_x2 = frame_w - 15
+                box_x1 = box_x2 - text_w - padding_x * 2 - 6
+                box_y1 = 15
+                box_y2 = box_y1 + text_h + padding_y * 2
+
+                overlay = frame.copy()
+                draw_rounded_rect(overlay, (box_x1, box_y1), (box_x2, box_y2), (18, 18, 18), radius)
+                cv.addWeighted(overlay, 0.85, frame, 0.15, 0, frame)
+
+                cv.rectangle(
+                    frame,
+                    (box_x1, box_y1 + radius),
+                    (box_x1 + 3, box_y2 - radius),
+                    accent_color,
+                    -1,
+                    cv.LINE_AA,
+                )
+
+                draw_rounded_rect(frame, (box_x1, box_y1), (box_x2, box_y2), (60, 60, 60), radius, thickness=1)
+
+                text_x = box_x1 + padding_x + 6
+                text_y = box_y2 - padding_y - baseline // 2
                 cv.putText(
                     frame,
                     display_text,
-                    (10, 30),
-                    cv.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
+                    (text_x, text_y),
+                    font,
+                    font_scale,
+                    text_color,
+                    thickness,
                     cv.LINE_AA,
                 )
 
@@ -173,7 +231,18 @@ def process_tennis_video():
             n_contacts += 1 if contact else 0
 
             # ball tracking
-            frame, coordinates = tracker.track(frame=frame)
+            if len(tracknet_buffer) == 3:
+                tracker.track(frame_sequence=tracknet_buffer) # run ball tracking
+                coordinates = tracker.tracking_history[-1] # get most recent coordinates
+                if coordinates == (-1, -1):
+                    coordinates = None # set to none to skip net clearance calculation
+                else:
+                    cx, cy = coordinates
+                    cx, cy = int(cx), int(cy)
+                    cv.circle(frame, center=(cx, cy), radius=4, color=(255, 0, 0), thickness=2)
+                tracknet_buffer.pop(0) # remove oldest element
+            else:
+                pass # less than 3 frames
 
             if clearance.net is None:
                 clearance.locate_net(orig_frame)
@@ -183,7 +252,8 @@ def process_tennis_video():
             else: pass
 
             if coordinates:
-                cx, cy = (coordinates[0] + coordinates[2]) // 2, (coordinates[1] + coordinates[3]) // 2
+                cx, cy = coordinates
+                cx, cy = int(cx), int(cy)
 
                 clearance.calculate_net_clearance(ball_cx=cx, ball_cy=cy)
 

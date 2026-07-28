@@ -18,3 +18,5 @@ atlas.db
 frontend/.mock-data.json
 frontend/sample-video.mp4
 /pres
+/sports/tennis/ball_tracking/tracknet/tracknet_videos
+/sports/tennis/ball_tracking/tracknet/dataset
