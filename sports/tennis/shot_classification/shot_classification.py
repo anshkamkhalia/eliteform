@@ -161,7 +161,7 @@ class ShotClassifier:
 
     def classify_shots(self, frame: np.ndarray, frame_idx: int, landmarker) -> Optional[str]:
 
-        if self.prev_pose is None or frame_idx % 1 == 0:
+        if self.prev_pose is None or frame_idx % 2 == 0:
             self.pose_results = self.yolo.predict(
                 source=frame,
                 classes=[0],
@@ -210,7 +210,7 @@ class ShotClassifier:
             return None
 
         # landmark extraction
-        if self.prev_landmarks_mp_result is None or frame_idx % 1 == 0:
+        if self.prev_landmarks_mp_result is None or frame_idx % 2 == 0:
 
             rgb_frame = cv.cvtColor(cropped_person, cv.COLOR_BGR2RGB)
             mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
