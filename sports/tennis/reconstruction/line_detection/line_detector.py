@@ -1,7 +1,7 @@
 import cv2 as cv
 import numpy as np
 
-class CourtDetector:
+class LineDetector:
     def __init__(self):
         pass
 
@@ -127,7 +127,7 @@ class CourtDetector:
 
         return merged
 
-    def detect_court(self, frame):
+    def detect_lines(self, frame):
 
         filtered_lines = []
         left_lines = [] # left lines have a positive slope
@@ -184,4 +184,4 @@ class CourtDetector:
         left_lines = self.merge_slanted_lines(left_lines)
         right_lines = self.merge_slanted_lines(right_lines)
 
-        return output
+        return {"horizontal_lines": horizontal_lines, "left_lines": left_lines, "right_lines": right_lines}
