@@ -8,14 +8,21 @@ import AnalysisStatus from "../components/AnalysisStatus";
 import ComparisonResults from "../components/ComparisonResults";
 import { IconAlert, IconChart } from "../components/icons";
 
+function referenceLabel(file) {
+  if (!file?.name) return "Custom";
+  return file.name.replace(/\.[^.]+$/, "") || "Custom";
+}
+
 export default function ShotComparisonFlow() {
   const job = useAnalysisJob();
   const { file, setFile, phase, result, error, saveError } = job;
 
   const [shotType, setShotType] = useState("forehand");
+  const [refMode, setRefMode] = useState("pro"); // "pro" | "custom"
   const [pro, setPro] = useState("");
   const [proOptions, setProOptions] = useState(null);
   const [proOptionsError, setProOptionsError] = useState(null);
+  const [referenceFile, setReferenceFile] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,10 +46,23 @@ export default function ShotComparisonFlow() {
     setPro(proOptions?.[t]?.[0] || "");
   };
 
+  const comparisonLabel =
+    refMode === "custom" ? referenceLabel(referenceFile) : pro;
+
+  const canRun =
+    Boolean(file) &&
+    phase !== "running" &&
+    (refMode === "custom" ? Boolean(referenceFile) : Boolean(pro));
+
+  const resetAll = () => {
+    job.reset();
+    setReferenceFile(null);
+  };
+
   return (
     <div className="workspace">
       <aside className="rail">
-        <Panel title="Source">
+        <Panel title="Your shot">
           <FileDrop
             file={file}
             onFile={setFile}
@@ -66,24 +86,56 @@ export default function ShotComparisonFlow() {
               ))}
             </div>
           </div>
+
           <div className="field">
             <label>Compare against</label>
-            <select
-              value={pro}
-              onChange={(e) => setPro(e.target.value)}
-              disabled={!proOptions}
-            >
-              {!proOptions && <option>Loading professional clips…</option>}
-              {proOptions?.[shotType]?.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
+            <div className="seg" role="group" aria-label="Reference source">
+              <button
+                type="button"
+                className={refMode === "pro" ? "active" : ""}
+                onClick={() => setRefMode("pro")}
+              >
+                Pro clip
+              </button>
+              <button
+                type="button"
+                className={refMode === "custom" ? "active" : ""}
+                onClick={() => setRefMode("custom")}
+              >
+                Your video
+              </button>
+            </div>
           </div>
+
+          {refMode === "pro" ? (
+            <div className="field">
+              <label>Professional</label>
+              <select
+                value={pro}
+                onChange={(e) => setPro(e.target.value)}
+                disabled={!proOptions}
+              >
+                {!proOptions && <option>Loading professional clips…</option>}
+                {proOptions?.[shotType]?.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="field">
+              <label>Reference video</label>
+              <FileDrop
+                file={referenceFile}
+                onFile={setReferenceFile}
+                hint="Any player or coach clip to compare against"
+              />
+            </div>
+          )}
         </Panel>
 
-        {proOptionsError && (
+        {refMode === "pro" && proOptionsError && (
           <div className="alert alert-error" role="alert">
             <IconAlert size={16} />
             <div>Couldn't load professional clips: {proOptionsError}</div>
@@ -107,17 +159,24 @@ export default function ShotComparisonFlow() {
           <button
             type="button"
             className="btn btn-primary btn-block"
-            disabled={!file || !pro || phase === "running"}
+            disabled={!canRun}
             onClick={() =>
               job.run(
-                (f, signal) => processShotAnalysis(f, shotType, pro, signal),
+                (f, signal) =>
+                  processShotAnalysis(
+                    f,
+                    shotType,
+                    comparisonLabel,
+                    signal,
+                    refMode === "custom" ? referenceFile : null
+                  ),
                 (data) =>
                   saveAnalysis({
                     kind: "comparison",
                     originalFilename: file?.name,
                     videoKey: data.key,
                     shotType,
-                    comparisonPro: pro,
+                    comparisonPro: data.comparison_pro || comparisonLabel,
                     payload: data,
                   })
               )
@@ -125,11 +184,11 @@ export default function ShotComparisonFlow() {
           >
             Compare shot
           </button>
-          {(file || result) && phase !== "running" && (
+          {(file || referenceFile || result) && phase !== "running" && (
             <button
               type="button"
               className="btn btn-subtle btn-block"
-              onClick={job.reset}
+              onClick={resetAll}
             >
               Reset
             </button>
@@ -140,8 +199,8 @@ export default function ShotComparisonFlow() {
       <section className="canvas">
         {phase === "running" && (
           <AnalysisStatus
-            title={`Comparing ${shotType} against ${pro}`}
-            message="Running pose estimation over your clip and the pro's reference clip, then diffing wrist velocity and six joint angles."
+            title={`Comparing ${shotType} against ${comparisonLabel}`}
+            message="Running pose estimation over your clip and the reference clip, then diffing wrist velocity and six joint angles."
             onCancel={job.cancel}
           />
         )}
@@ -153,9 +212,9 @@ export default function ShotComparisonFlow() {
             </div>
             <h3>No comparison yet</h3>
             <p>
-              Upload a single-shot clip, choose the shot type and a professional
-              reference, then run the comparison to see velocity, joint angles,
-              and swing path side by side.
+              Upload a single-shot clip, pick a pro reference or upload your own
+              comparison video, then run the comparison to see velocity, joint
+              angles, and swing path side by side.
             </p>
           </div>
         )}
@@ -164,9 +223,9 @@ export default function ShotComparisonFlow() {
           <ComparisonResults
             result={result}
             shotType={shotType}
-            pro={pro}
+            pro={result.comparison_pro || comparisonLabel}
             actionLabel="New comparison"
-            onAction={job.reset}
+            onAction={resetAll}
           />
         )}
       </section>

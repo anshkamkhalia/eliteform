@@ -334,19 +334,23 @@ function drainBody(req) {
 
 function parseFormFields(body, contentType) {
   const m = /boundary=(.+)$/.exec(contentType || "");
-  if (!m) return { fields: {}, hasVideo: false };
+  if (!m) return { fields: {}, hasVideo: false, hasReference: false };
   const boundary = `--${m[1]}`;
   const text = body.toString("latin1");
   const parts = text.split(boundary).slice(1, -1);
   const fields = {};
   let hasVideo = false;
+  let hasReference = false;
   for (const part of parts) {
     const nameMatch = /name="([^"]+)"/.exec(part);
     if (!nameMatch) continue;
     if (/filename="/.test(part)) {
-      if (nameMatch[1] === "video") {
-        const fnMatch = /filename="([^"]*)"/.exec(part);
-        hasVideo = Boolean(fnMatch && fnMatch[1]);
+      const fnMatch = /filename="([^"]*)"/.exec(part);
+      const named = Boolean(fnMatch && fnMatch[1]);
+      if (nameMatch[1] === "video") hasVideo = named;
+      if (nameMatch[1] === "reference_video") {
+        hasReference = named;
+        if (named) fields.reference_filename = fnMatch[1];
       }
       continue;
     }
@@ -355,7 +359,7 @@ function parseFormFields(body, contentType) {
       fields[nameMatch[1]] = part.slice(idx + 4).replace(/\r\n$/, "");
     }
   }
-  return { fields, hasVideo };
+  return { fields, hasVideo, hasReference };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -559,8 +563,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   const body = await drainBody(req);
-  const { fields, hasVideo } = parseFormFields(body, req.headers["content-type"]);
-  console.log(`${req.method} ${req.url}`, fields, `video=${hasVideo}`);
+  const { fields, hasVideo, hasReference } = parseFormFields(
+    body,
+    req.headers["content-type"]
+  );
+  console.log(
+    `${req.method} ${req.url}`,
+    fields,
+    `video=${hasVideo}`,
+    `reference=${hasReference}`
+  );
 
   if (!hasVideo) {
     return send(400, { error: "no video file provided (expected form field 'video')" });
@@ -593,16 +605,25 @@ const server = http.createServer(async (req, res) => {
   if (req.url === "/process-tennis-shot-analysis") {
     await sleep(2500);
     const shotType = fields.shot_type;
-    const pro = fields.comparison_pro;
+    let pro = fields.comparison_pro;
     const available = listProClips();
-    // Mimics the real backend's 400 on an unrecognized shot_type/comparison_pro.
-    if (!available[shotType] || !available[shotType].includes(pro)) {
+    if (!["forehand", "backhand", "serve"].includes(shotType)) {
+      return send(400, { error: `invalid shot_type '${shotType}'` });
+    }
+    if (hasReference) {
+      const stem = (fields.reference_filename || "Custom").replace(
+        /\.[^.]+$/,
+        ""
+      );
+      pro = pro || stem || "Custom";
+    } else if (!available[shotType] || !available[shotType].includes(pro)) {
       return send(400, {
         error: `invalid comparison_pro '${pro}' for shot_type '${shotType}'`,
       });
     }
     const payload =
       shotType === "serve" ? serveResults() : groundstrokeResults(shotType);
+    payload.comparison_pro = pro;
     const velocity = payload.results?.velocity ?? {};
     recordAnalysis({
       kind: "comparison",

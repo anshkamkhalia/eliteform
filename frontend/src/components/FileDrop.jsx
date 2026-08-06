@@ -6,8 +6,6 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Compact uploader sized for the control rail: a small drop target until a
-// file is chosen, then a file chip plus a short preview.
 export default function FileDrop({ file, onFile, hint }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
@@ -23,7 +21,6 @@ export default function FileDrop({ file, onFile, hint }) {
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  // The backend accepts anything ffmpeg/OpenCV can read, so don't hard-filter.
   const pick = (f) => {
     if (f) onFile(f);
   };

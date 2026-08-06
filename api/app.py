@@ -326,38 +326,23 @@ def process_tennis_video():
 
 @app.route("/pro-clips", methods=["GET"])
 def pro_clips():
-
-    """
-    
-    lists all files in pro_videos
-    
-    """
-
+    """List available professional reference clips by shot type."""
     return jsonify(list_pro_clips())
 
 @app.route("/process-tennis-shot-analysis", methods=["POST"])
 def process_tennis_shot_analysis():
-
-    """
-    
-    ai coaching tips
-    
-    """
+    """Compare a player clip against a pro library clip or an uploaded reference video."""
 
     shot_type = request.form.get("shot_type")
-    comparison_pro = request.form.get("comparison_pro")
-
+    comparison_pro = (request.form.get("comparison_pro") or "").strip()
     available = list_pro_clips()
-    if shot_type not in available:
+    if shot_type not in ("forehand", "backhand", "serve"):
         return jsonify({"error": f"invalid shot_type '{shot_type}'"}), 400
-    if comparison_pro not in available[shot_type]:
-        return jsonify({"error": f"invalid comparison_pro '{comparison_pro}' for shot_type '{shot_type}'"}), 400
 
     if "video" not in request.files:
         return jsonify({"error": "no video file provided (expected form field 'video')"}), 400
 
     video_file = request.files["video"]
-
     if video_file.filename == "":
         return jsonify({"error": "empty filename"}), 400
 
@@ -366,31 +351,61 @@ def process_tennis_shot_analysis():
     video_file.save(input_path)
     key = upload_video(local_path=input_path, folder="process_tennis_shot_analysis")
 
-    if shot_type in ["forehand", "backhand"]:
-        gr_analysis = GroundStrokeAnalysis(shot_type=shot_type, pro_for_comparison=comparison_pro)
-        results = gr_analysis.run_analysis(player_video_path=input_path, pro_video_path=f"pro_videos/tennis/{shot_type}/{comparison_pro}.mp4")
+    ref_path = None
+    ref_file = request.files.get("reference_video")
+    if ref_file and ref_file.filename:
+        ref_name = secure_filename(ref_file.filename)
+        ref_path = os.path.join(UPLOAD_DIR, f"ref_{ref_name}")
+        ref_file.save(ref_path)
+        pro_label = comparison_pro or os.path.splitext(ref_name)[0] or "Custom"
+        pro_video_path = ref_path
     else:
-        serve_analysis = ServeAnalysis(pro_for_comparison=comparison_pro)
-        results = serve_analysis.run_analysis(player_video_path=input_path, pro_video_path=f"pro_videos/tennis/{shot_type}/{comparison_pro}.mp4")
+        if comparison_pro not in available.get(shot_type, []):
+            os.remove(input_path)
+            return jsonify(
+                {
+                    "error": (
+                        f"invalid comparison_pro '{comparison_pro}' for shot_type "
+                        f"'{shot_type}' (or upload reference_video)"
+                    )
+                }
+            ), 400
+        pro_label = comparison_pro
+        pro_video_path = os.path.join(
+            PRO_VIDEOS_ROOT, shot_type, f"{comparison_pro}.mp4"
+        )
 
-    os.remove(input_path)
+    try:
+        if shot_type in ["forehand", "backhand"]:
+            gr_analysis = GroundStrokeAnalysis(
+                shot_type=shot_type, pro_for_comparison=pro_label
+            )
+            results = gr_analysis.run_analysis(
+                player_video_path=input_path, pro_video_path=pro_video_path
+            )
+        else:
+            serve_analysis = ServeAnalysis(pro_for_comparison=pro_label)
+            results = serve_analysis.run_analysis(
+                player_video_path=input_path, pro_video_path=pro_video_path
+            )
+    finally:
+        if os.path.exists(input_path):
+            os.remove(input_path)
+        if ref_path and os.path.exists(ref_path):
+            os.remove(ref_path)
 
     payload = {
         "results": results,
         "key": key,
         "video_url": presigned_video_url(key),
+        "comparison_pro": pro_label,
     }
 
     return jsonify(payload), 200
 
 @app.route("/coaching-tips", methods=["POST"])
 def coaching_tips():
-
-    """
-    
-    gets ai coaching tips from gemini by sending extracting information
-    
-    """
+    """Return coaching tips generated from comparison metrics."""
 
     payload = request.get_json(silent=True)
     if not payload or "results" not in payload:

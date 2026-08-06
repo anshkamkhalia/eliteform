@@ -1,9 +1,6 @@
 import { API_BASE } from "./config";
 import { supabase } from "./lib/supabaseClient";
 
-// Both endpoints are synchronous and can run for minutes on longer clips.
-// fetch() has no built-in timeout, so requests simply wait; the caller gets
-// an AbortController signal for user-initiated cancellation.
 async function postForm(path, formData, signal) {
   let res;
   try {
@@ -20,8 +17,6 @@ async function postForm(path, formData, signal) {
     );
   }
 
-  // Unhandled backend exceptions surface as HTML 500 pages, so any non-JSON
-  // or non-200 response is treated as "analysis failed".
   const text = await res.text();
   let data = null;
   try {
@@ -65,16 +60,23 @@ export async function fetchProClips(signal) {
   return jsonRequest("/pro-clips", { signal });
 }
 
-export function processShotAnalysis(file, shotType, comparisonPro, signal) {
+export function processShotAnalysis(
+  file,
+  shotType,
+  comparisonPro,
+  signal,
+  referenceFile = null
+) {
   const fd = new FormData();
   fd.append("video", file);
   fd.append("shot_type", shotType);
   fd.append("comparison_pro", comparisonPro);
+  if (referenceFile) {
+    fd.append("reference_video", referenceFile);
+  }
   return postForm("/process-tennis-shot-analysis", fd, signal);
 }
 
-// AI coaching feedback generated server-side from the comparison metrics
-// (the AI API key never reaches the browser).
 export async function fetchCoachingTips(results, shotType, comparisonPro, signal) {
   const res = await fetch(`${API_BASE}/coaching-tips`, {
     method: "POST",
@@ -95,12 +97,6 @@ export async function fetchCoachingTips(results, shotType, comparisonPro, signal
 }
 
 // ---- history (Supabase) ----
-//
-// Auth and history are handled directly against Supabase from the browser
-// (see AuthContext.jsx and supabaseClient.js) rather than through the Flask
-// backend -- RLS on the `analyses` table (supabase/schema.sql) scopes every
-// read/write to the signed-in user, so there's no separate backend auth
-// check needed here.
 
 const LIST_COLUMNS =
   "id, kind, created_at, original_filename, video_key, shot_type, comparison_pro";
@@ -112,15 +108,14 @@ async function currentUserId() {
   return data.user.id;
 }
 
-/** Persist one analysis result for the signed-in user. Called by the two
- * analysis flows right after a successful backend response. */
+/** Persist one analysis result for the signed-in user. */
 export async function saveAnalysis({
   kind, // "session" | "comparison"
   originalFilename,
   videoKey,
   shotType,
   comparisonPro,
-  payload, // the full JSON response from processTennisVideo / processShotAnalysis
+  payload,
 }) {
   const userId = await currentUserId();
   const { error } = await supabase.from("analyses").insert({
@@ -169,14 +164,10 @@ const SEARCH_MODES = [
   { id: "kind", label: "Analysis type", placeholder: "session or comparison" },
 ];
 
-// No backend search service (Typesense was removed along with the old
-// sqlite history store) -- this is just Postgres ILIKE filtering, which is
-// plenty for one user's history.
 export async function fetchHistorySearchModes() {
   return { modes: SEARCH_MODES, engine: "supabase" };
 }
 
-/** Search saved analyses. mode: all | filename | pro | shot_type | kind */
 export async function searchHistory(
   { q = "", mode = "all", kind, shotType, pro } = {},
   signal
